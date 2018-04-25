@@ -6,6 +6,10 @@ a {
 	color:red;
 }
 
+a:hover {
+	color: #6f0000;
+}
+
 .bg {
 	/*background-image: linear-gradient(to bottom, rgba(255,255,255,0.9) 0%,rgba(255,255,255,.5) 100%), url(imgs/bg2.jpg);*/
 	background-color: rgba(245,212,51,0.6);
@@ -81,7 +85,8 @@ a {
 
 .greentblrow{
 	/*background-color: rgb(17,168,39,0.8) !important;*/
-	background-color: #11A827 !important;
+	/*background-color: #11A827 !important;*/
+	background-color: #ffa500 !important;
 	/* IE 8 */
   	-ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=80)";
 
@@ -277,7 +282,7 @@ a {
 #lastProducer{
 	font-size: 27px;
 
-	color: #a616ca;
+	color: #7f5200;
 }
 
 
