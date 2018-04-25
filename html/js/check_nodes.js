@@ -240,7 +240,7 @@ function updateNodeInfo(node, nodeID){
 
 	$( "#c3_"+blockProducerList[nodeID].bp_name ).html(node.head_block_num);
 	// $( "#c6_"+blockProducerList[nodeID].bp_name ).html(parseInt("0x"+node.server_version));
-	$( "#c6_"+blockProducerList[nodeID].bp_name ).html("0x"+node.server_version);
+	$( "#c6_"+blockProducerList[nodeID].bp_name ).html(node.server_version);
 
 
 
