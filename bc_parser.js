@@ -265,12 +265,12 @@ function processBlock(this_, blocknum, block){
 
 	if (this_.PRODUCERS[block.producer]){
 		this_.PRODUCERS[block.producer].produced += 1;
-		this_.PRODUCERS[block.producer].tx_count += block.input_transactions.length;
+		this_.PRODUCERS[block.producer].tx_count += block.transactions.length;
 		this_.PRODUCERS[block.producer].tx_sum += 0;  //!!!! ADD SUMS
 	} else {
 		this_.PRODUCERS[block.producer] = {};
 		this_.PRODUCERS[block.producer].produced = 1;
-		this_.PRODUCERS[block.producer].tx_count = block.input_transactions.length;
+		this_.PRODUCERS[block.producer].tx_count = block.transactions.length;
 		this_.PRODUCERS[block.producer].tx_sum = 0;  //!!!! ADD SUMS
 	}
 
@@ -278,10 +278,10 @@ function processBlock(this_, blocknum, block){
 	this_.announceMsg(this_, "blockprod_update", this_.PRODUCERS[block.producer]);
 
 
-    if (block.input_transactions.length > 0){
+    if (block.transactions.length > 0){
     	this_.STATS.total_txblocks_count ++;
 
-    	this_.STATS.total_tx_count += block.input_transactions.length;
+    	this_.STATS.total_tx_count += block.transactions.length;
 
         this_.processTransaction(this_, block.block_num, block);
 
@@ -304,265 +304,27 @@ function processBlock(this_, blocknum, block){
 
 function processTransaction(this_, blocknum, block){
     //console.log(txs);
-	var txs = block.input_transactions;
-	//var txs_id =block.regions[0];
+	var txs = block.transactions;
 
 	for (var t in txs) {
 		var txs_id = "";
 
-		if (block.regions[0] && block.regions[0].cycles_summary[1] && block.regions[0].cycles_summary[1][0].transactions)
-    		txs_id = block.regions[0].cycles_summary[1][0].transactions[t].id;
+        var txInfo = {txid: txs_id, "block": blocknum, "status": t.status, "cpu_usage_us": t.cpu_usage_us, "net_usage_words": t.net_usage_words};
+        this_.addTransactions(this_, txInfo);
 
-		var tx = txs[t].transaction;
-       	var actions = tx.actions;
+        //this_.LastTransactions.unshift(txInfo);
+        this_.LastTransactions.push(txInfo);
+        if (this_.LastTransactions.length > 8) {
+            this_.LastTransactions.shift();
+        }
 
-       	for (var a in actions){
-       		var action = actions[a];
-       		//action.account
-       		//action.name  //setcode, setabi, newaccount, issue, transfer
-       		a_data = action.data; //obj
-            //console.log(action.name);
-
-			var msgObject = {"c1": blocknum, "c2": action.name};
-
-			var updAccount = {};
-            var txInfo_description = "";
-            var txTo = "";
-            var tx_data = {};
-
-
-
-
-            switch (action.name){
-            	case 'setcode':
-            		msgObject.c3 = action.account;
-            		msgObject.c4 = "->";
-            		msgObject.c5 = a_data.account;
-            		msgObject.c6 = "smart contract for " + a_data.account
-                    //updAccount = { $push: {"transactions": {"action": action.name, "block":blocknum}}};
-                    txTo = a_data.account;
-                    tx_data = {};
-
-
-                    txInfo_description = "smart contract";
-            		break;
-            	case 'setabi':
-            		msgObject.c3 = action.account;
-            		msgObject.c4 = "->";
-            		msgObject.c5 = a_data.account;
-            		msgObject.c6 = "smart contract for " + a_data.account;
-
-                    txTo = a_data.account;
-            		txInfo_description = "smart contract";
-            		tx_data = {};
-            		//var updAccount = { $push: {"transactions": {"action": action.name, "block":blocknum}}};
-            		break;
-            	case 'newaccount':
-            		msgObject.c3 = a_data.creator;
-            		msgObject.c4 = "->";
-            		msgObject.c5 = a_data.name;
-            		msgObject.c6 = "";
-                    //var newAcc = { "name": a_data.name, "createdby": a_data.creator, "date":tx.expiration, "balances": {"EOS": 0}, "accounts": [], "transactions": [] };
-                    var newAcc = { "name": a_data.name, "createdby": a_data.creator, "date":tx.expiration, "balances": {"EOS": 0}, "accounts": []};
-                    this_.updateAccount(this_, a_data.name, newAcc);
-
-					//updAccount = { $push: {"transactions": {"action": action.name+' - '+a_data.name, "block":blocknum}, "accounts": {"name": a_data.name, "block": blocknum} }};
-					updAccount = { $push: {"accounts": {"name": a_data.name, "block": blocknum} }};
-                    this_.updateAccount(this_, action.account, updAccount);
-
-					txTo = a_data.name;
-            		txInfo_description = a_data.creator + " created account for " + a_data.name;
-            		tx_data = a_data;
-            		break;
-
-            	case 'setprods':
-                    msgObject.c3 = action.account;
-            		msgObject.c4 = "producers:";
-                    var newProds = "";
-            		for ( var pp in a_data.producers)
-            			newProds += a_data.producers[pp].producer_name+", "
-            		msgObject.c5 = newProds;
-            		msgObject.c6 = "";
-
-     				txTo = "";
-     				txInfo_description = "new producers:" + newProds;
-                    tx_data = a_data;
-                    //console.log(msgObject);
-
-            		break;
-            	case 'create':
-            		if (!action.authorization[0].actor) action.authorization[0].actor = "";
-            		if (!a_data.issuer) a_data.to = "";
-            		if (!a_data.maximum_supply) a_data.to = "";
-
-                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
-            		msgObject.c4 = "Issue";
-            		msgObject.c5 = a_data.issuer;
-            		msgObject.c6 = a_data.maximum_supply;
-
-					txTo = a_data.issuer;
-     				txInfo_description = "Token Create issuer";
-                    tx_data = a_data;
-
-                    //console.log(msgObject);
-
-            	break;
-
-            	case 'issue':
-                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
-            		if (!a_data.to) a_data.to = "";
-            		if (!a_data.quantity) a_data.to = "";
-            		if (!a_data.memo) a_data.to = "";
-            		msgObject.c4 = ">" + a_data.to;
-            		msgObject.c5 = a_data.quantity;
-            		msgObject.c6 = a_data.memo;
-                    var currency = (a_data.quantity+"").split(" ");
-                    //console.log(msgObject);
-                    txTo = a_data.to;
-     				txInfo_description = "Token issue Funds";
-                    tx_data = a_data;
-            	break;
-
-            	case 'transfer':
-					if (!action.authorization[0].actor) action.authorization[0].actor = "";
-            		if (!a_data.from) a_data.from = "";
-            		if (!a_data.to) a_data.to = "";
-            		if (!a_data.quantity) a_data.quantity = "";
-            		if (!a_data.memo) a_data.memo = "";
-
-                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
-            		msgObject.c4 = a_data.from + ">" + a_data.to;
-            		msgObject.c5 = a_data.quantity;
-            		msgObject.c6 = a_data.memo;
-                    var currency = (a_data.quantity+"").split(" ");
-
-                    txTo = a_data.to;
-     				txInfo_description = "Token transfer";
-                    tx_data = a_data;
-                    //console.log(msgObject);
-
-            	break;
-
-            	case 'getbalance':
-                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
-            		msgObject.c4 = "owner";
-            		msgObject.c5 = a_data.owner;
-            		msgObject.c6 = "";
-
-            		txTo = "";
-     				txInfo_description = "Token getbalance";
-                    tx_data = a_data;
-                    //console.log(msgObject);
-
-            	break;
-
-            	default:
-                    msgObject.c3 = action.account;
-            		msgObject.c4 = "..."
-            		msgObject.c5 = "..";
-            		msgObject.c6 = "..";
-
-                    txTo = "";
-     				txInfo_description = "unknown action";
-     				tx_data = a_data;
-
-            }
-
-            if (action.account == "eosio") {
-            	switch (action.name){
-					case 'issue':
-	            		msgObject.c3 = action.account+"->";
-	            		msgObject.c4 = a_data.to;
-	            		msgObject.c5 = a_data.quantity;
-	            		msgObject.c6 = "";
-	            		if (a_data.memo)
-	            			msgObject.c6 = a_data.memo;
-
-
-	              		var currency = (a_data.quantity+"").split(" ");
-	                    currency[0].replace(".", "");
-	                    currency[0].replace(",", "");
-
-	                    var currobj = {};
-						currobj["balances."+currency[1]+""] = currency[0]*1;
-
-						var updAccount2 = { $inc: currobj };
-	                    this_.updateAccount(this_, a_data.to, updAccount2);
-
-	                    txTo = a_data.to;
-	                    txInfo_description = "Issue for " + a_data.to + " " +a_data.quantity;
-	                    tx_data = a_data;
-	            		//this_.updateAccountbalance(action.name, a_data);
-	            		break;
-	            	case 'transfer':
-	                    msgObject.c3 = a_data.from + "->";
-	            		msgObject.c4 = a_data.to;
-	            		msgObject.c5 = a_data.quantity;
-	            		msgObject.c6 = a_data.memo;
-	                    var currency = (a_data.quantity+"").split(" ");
-	                    //console.log(msgObject);
-						var currobjto = {};
-						var currobjfrom = {};
-
-						var mult = 1;
-						if (currency[1] == "EOS" ) mult = 10000;
-
-						currobjto["balances."+currency[1]+""] = parseInt(currency[0]*mult);
-						currobjfrom["balances."+currency[1]+""] = -1*parseInt(currency[0]*mult);
-	                    //console.log(currobj);
-	            		//var updAccount = { $push: {"transactions": {"action": action.name+' to '+a_data.to, "block":blocknum}}, $inc: currobjfrom };
-	            		updAccount = { $inc: currobjfrom };
-	                    this_.updateAccount(this_, action.account, updAccount);
-
-						//var updAccount2 = { $push: {"transactions": {"action": action.name+' from '+a_data.from, "block":blocknum}}, $inc: currobjto };
-						var updAccount2 = { $inc: currobjto };
-	                    this_.updateAccount(this_, a_data.to, updAccount2);
-
-	     				txTo = a_data.to;
-	     				txInfo_description = "From " + a_data.from + " to " + a_data.to + " " + a_data.quantity + " " + a_data.memo;
-	                    tx_data = a_data;
-	            		//this_.updateAccountbalance(action.name, a_data);
-	            		//console.log(a_data);
-	            		break;
-
-				}
-			}
-
-
-            //var txInfo = {txid: txs_id, "block": blocknum, "account": action.account, "to": txTo, "action": action.name, "date": tx.expiration, "data": tx_data, "description": txInfo_description, "msgObject":msgObject};
-            var txInfo = {txid: txs_id, "block": blocknum, "account": action.account, "to": txTo, "action": action.name, "date": tx.expiration, "data": {}, "description": txInfo_description, "msgObject":msgObject};
-            this_.addTransactions(this_, txInfo);
-
-            //this_.LastTransactions.unshift(txInfo);
-            this_.LastTransactions.push(txInfo);
-            if (this_.LastTransactions.length > 8) {
-            	this_.LastTransactions.shift();
-            }
-
-
-            this_.announceMsg(this_, "transaction", msgObject);
-
-
-            //var newvalues = { $set: updValue, $inc: updAcc  };     //{"balances.EOS"}
-
-       		//setcode: account, code
-       		//setabi: account, abi
-       		//newaccount: creator, name, owner[{key, weight}], active[{key, weight}], recovery [{}]
-       		//issue: to, quantity
-       		//transfer: from, to, quantity, memo
-
-
-       	}
-        //tx.ref_block_num
-
-
-
-
+        var msgObject = {"c1": blocknum, "c2": t.status};
+		msgObject.c3 = "cpu:";
+        msgObject.c4 = t.cpu_usage_us;
+        msgObject.c5 = "net:";
+        msgObject.c6 = t.net_usage_words
+        this_.announceMsg(this_, "transaction", msgObject);
 	}
-
-
-
-
 
 }
 
