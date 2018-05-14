@@ -303,13 +303,20 @@ function processBlock(this_, blocknum, block){
 }
 
 function processTransaction(this_, blocknum, block){
-    //console.log(txs);
 	var txs = block.transactions;
+    //console.log(txs);
 
 	for (var t in txs) {
+		var tx = txs[t];
 		var txs_id = "";
 
-        var txInfo = {txid: txs_id, "block": blocknum, "status": t.status, "cpu_usage_us": t.cpu_usage_us, "net_usage_words": t.net_usage_words};
+        var msgObject = {"c1": blocknum, "c2": tx.status};
+		msgObject.c3 = "cpu:";
+        msgObject.c4 = tx.cpu_usage_us;
+        msgObject.c5 = "net:";
+        msgObject.c6 = tx.net_usage_words
+
+        var txInfo = {txid: txs_id, "block": blocknum, "status": tx.status, "cpu_usage_us": tx.cpu_usage_us, "net_usage_words": tx.net_usage_words, "msgObject": msgObject};
         this_.addTransactions(this_, txInfo);
 
         //this_.LastTransactions.unshift(txInfo);
@@ -318,11 +325,6 @@ function processTransaction(this_, blocknum, block){
             this_.LastTransactions.shift();
         }
 
-        var msgObject = {"c1": blocknum, "c2": t.status};
-		msgObject.c3 = "cpu:";
-        msgObject.c4 = t.cpu_usage_us;
-        msgObject.c5 = "net:";
-        msgObject.c6 = t.net_usage_words
         this_.announceMsg(this_, "transaction", msgObject);
 	}
 
