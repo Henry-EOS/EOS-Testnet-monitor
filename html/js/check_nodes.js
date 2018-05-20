@@ -43,6 +43,10 @@ function init(){
       updateNodeInfo(msg, msg.nodeid);
     });
 
+	socket.on('vote_info', function(msg){
+      updateVoteInfo(msg);
+    });
+
     socket.on('error_node', function(msg){
       nodeError("", msg);
     });
@@ -246,6 +250,29 @@ function updateNodeInfo(node, nodeID){
 
 }
 
+/**
+ * Number.prototype.format(n, x)
+ * 
+ * @param integer n: length of decimal
+ * @param integer x: length of sections
+ */
+Number.prototype.format = function(n, x) {
+    var re = '\\d(?=(\\d{' + (x || 3) + '})+' + (n > 0 ? '\\.' : '$') + ')';
+    return this.toFixed(Math.max(0, ~~n)).replace(new RegExp(re, 'g'), '$&,');
+};
+
+
+function updateVoteInfo(voteList){
+    if (blockProducerList.length == 0) return;
+
+	for (var v in voteList){
+		var votes = Number(voteList[v].total_votes);
+	    $("#c14_"+voteList[v].owner ).html(votes.format(4) + " EOS");
+	}
+
+}
+
+
 function nodeError(reqest, nodeID){
    	if (blockProducerList.length == 0) return;
 
@@ -357,6 +384,7 @@ function initNodesList(){
  		var lastNodeBlockProduced = "--";
  		var lastNodeBlockProducedTime = "--";
         var nodeVersion = "--";
+		var votes = "0 EOS"
  		var node_http_url = "<a href='http://"+blockProducerList[bp_].node_addr+":"+blockProducerList[bp_].port_http+"/v1/chain/get_info' target='_blank'>"+blockProducerList[bp_].port_http+"</a>";
 
 		var toolTip_inf = "Address: " +blockProducerList[bp_].node_addr+ "   \
@@ -382,6 +410,7 @@ function initNodesList(){
  								<td class='c13' id='c13_"+bpN+"'>--</td> \
  								<td class='c10' id='c10_"+bpN+"'>"+blockProducerList[bp_].organisation+"</td> \
  								<td class='c11' id='c11_"+bpN+"'>"+blockProducerList[bp_].location+"</td> \
+				 				<td class='c14' id='c14_"+bpN+"'>"+votes+"</td> \
  							</tr>");
  		} else {
  			nodesCount++;

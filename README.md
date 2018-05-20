@@ -9,7 +9,7 @@ Please add line to config.ini for all nodes:
 access-control-allow-origin = *   
 to allow access to monitor  
   
-Monitor example: http://jungle.cryptolions.io:9898/monitor/  
+Monitor example: http://testnet.eosland.ca:9898
 # Features  
 - Fast nodes status monitor  
 - Telegram bot @JungleTestnet_bot to get notification on node crash.   
@@ -29,7 +29,7 @@ sudo apt-get install mongodb
 
 2. Create project Dir and install modules   
 cd /var/www   
-git clone https://github.com/CryptoLions/EOS-Testnet-monitor.git   
+git clone https://github.com/eosland2018/EOS-Testnet-monitor.git   
 cd EOS-Testnet-monitor   
 npm install   
 chmod 700 start.sh  

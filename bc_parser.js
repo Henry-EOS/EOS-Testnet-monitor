@@ -16,6 +16,7 @@ module.exports = {
   getStats: getStats,
   getProducers: getProducers,
   getNodeInfo: getNodeInfo,
+  getVoteInfo: getVoteInfo,
   CheckNewBlocksTimer: CheckNewBlocksTimer,
   getBlockInfo: getBlockInfo,
   processBlock: processBlock,
@@ -75,6 +76,7 @@ function init(data){
 
     this.reinit();
     this.getNodeInfo(this, this.data.CONFIG.nodeAddr, this.LastCheckedNode);
+	this.getVoteInfo(this, "127.0.0.1:8888");
 
 	this.interval_main_loop = setInterval(mainLoop, this.data.CONFIG.mainLoopInterval, this);
 	this.interval_blockcheck = setInterval(CheckNewBlocksTimer, this.data.CONFIG.blockCheckInterval, this);
@@ -104,8 +106,10 @@ function mainLoop(this_){
     //this_.announceMsg(this_, "console", this_.data.CONFIG.hook);
 
     this_.LastCheckedNode++;
-    if (this_.LastCheckedNode >= this_.NODES.length)
+    if (this_.LastCheckedNode >= this_.NODES.length) {
     	this_.LastCheckedNode = 0;
+		this_.getVoteInfo(this_, "127.0.0.1:8888");
+	}
 
 	var addr = this_.NODES[this_.LastCheckedNode].node_addr;
     var port = this_.NODES[this_.LastCheckedNode].port_http;
@@ -223,6 +227,32 @@ function getNodeInfo(this_, ipaddr, nodeid){
 
 }
 
+function getVoteInfo(this_, ipaddr){
+	var url = "http://"+ipaddr + this_.data.EOSAPI.api_get_table;
+	this_.data.request.post({
+			headers: {'content-type' : 'application/json'},
+			url: url,
+			body: {json: true, code: "eosio", scope: "eosio", table: "producers"},
+			json: true
+		}, function (error, response, body) {
+		    if (!error && response.statusCode === 200) {
+				var voteList = body.rows;
+				var now = new Date().getTime() / 1000;
+				var weight =  Math.floor((now - 946684800) / (86400 * 7)) / Number(52);
+				//console.log('getVoteInfo w: '+weight);
+				for (var v in voteList) {
+                                        //console.log('getVoteInfo totalVotes: ' + voteList[v].total_votes);
+					voteList[v].total_votes = voteList[v].total_votes / Math.pow(2, weight) / 10000.0;
+				}
+
+	            this_.announceMsg(this_, "vote_info", voteList);
+
+		    }
+		}
+	);
+
+}
+
 function getBlockInfo(this_, ipaddr, blocknum){
 	var url = "http://"+ipaddr + this_.data.EOSAPI.api_get_block;
 	//var url = "http://127.0.0.1:8898/v1/chain/get_info";
@@ -308,26 +338,263 @@ function processTransaction(this_, blocknum, block){
 
 	for (var t in txs) {
 		var tx = txs[t];
-		var txs_id = "";
+		var txs_id = tx.trx.id;
+       	var actions = tx.trx.transaction.actions;
 
-        var msgObject = {"c1": blocknum, "c2": tx.status};
-		msgObject.c3 = "cpu:";
-        msgObject.c4 = tx.cpu_usage_us;
-        msgObject.c5 = "net:";
-        msgObject.c6 = tx.net_usage_words
+        //tx.status "executed"
 
-        var txInfo = {txid: txs_id, "block": blocknum, "status": tx.status, "cpu_usage_us": tx.cpu_usage_us, "net_usage_words": tx.net_usage_words, "msgObject": msgObject};
-        this_.addTransactions(this_, txInfo);
+       	for (var a in actions){
+       		var action = actions[a];
+       		//action.account
+       		//action.name  //setcode, setabi, newaccount, issue, transfer
+       		a_data = action.data; //obj
+            //console.log(action.name);
 
-        //this_.LastTransactions.unshift(txInfo);
-        this_.LastTransactions.push(txInfo);
-        if (this_.LastTransactions.length > 8) {
-            this_.LastTransactions.shift();
-        }
+			var msgObject = {"c1": blocknum, "c2": action.name};
 
-        this_.announceMsg(this_, "transaction", msgObject);
+			var updAccount = {};
+            var txInfo_description = "";
+            var txTo = "";
+            var tx_data = {};
+
+
+            switch (action.name){
+            	case 'setcode':
+            		msgObject.c3 = action.account;
+            		msgObject.c4 = "->";
+            		msgObject.c5 = a_data.account;
+            		msgObject.c6 = "smart contract for " + a_data.account
+                    //updAccount = { $push: {"transactions": {"action": action.name, "block":blocknum}}};
+                    txTo = a_data.account;
+                    tx_data = {};
+
+
+                    txInfo_description = "smart contract";
+            		break;
+            	case 'setabi':
+            		msgObject.c3 = action.account;
+            		msgObject.c4 = "->";
+            		msgObject.c5 = a_data.account;
+            		msgObject.c6 = "smart contract for " + a_data.account;
+
+                    txTo = a_data.account;
+            		txInfo_description = "smart contract";
+            		tx_data = {};
+            		//var updAccount = { $push: {"transactions": {"action": action.name, "block":blocknum}}};
+            		break;
+            	case 'newaccount':
+            		msgObject.c3 = a_data.creator;
+            		msgObject.c4 = "->";
+            		msgObject.c5 = a_data.name;
+            		msgObject.c6 = "";
+                    //var newAcc = { "name": a_data.name, "createdby": a_data.creator, "date":tx.expiration, "balances": {"EOS": 0}, "accounts": [], "transactions": [] };
+                    var newAcc = { "name": a_data.name, "createdby": a_data.creator, "date":tx.expiration, "balances": {"EOS": 0}, "accounts": []};
+                    this_.updateAccount(this_, a_data.name, newAcc);
+
+					//updAccount = { $push: {"transactions": {"action": action.name+' - '+a_data.name, "block":blocknum}, "accounts": {"name": a_data.name, "block": blocknum} }};
+					updAccount = { $push: {"accounts": {"name": a_data.name, "block": blocknum} }};
+                    this_.updateAccount(this_, action.account, updAccount);
+
+					txTo = a_data.name;
+            		txInfo_description = a_data.creator + " created account for " + a_data.name;
+            		tx_data = a_data;
+            		break;
+
+            	case 'setprods':
+                    msgObject.c3 = action.account;
+            		msgObject.c4 = "producers:";
+                    var newProds = "";
+            		for ( var pp in a_data.producers)
+            			newProds += a_data.producers[pp].producer_name+", "
+            		msgObject.c5 = newProds;
+            		msgObject.c6 = "";
+
+     				txTo = "";
+     				txInfo_description = "new producers:" + newProds;
+                    tx_data = a_data;
+                    //console.log(msgObject);
+
+            		break;
+            	case 'create':
+            		if (!action.authorization[0].actor) action.authorization[0].actor = "";
+            		if (!a_data.issuer) a_data.to = "";
+            		if (!a_data.maximum_supply) a_data.to = "";
+
+                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
+            		msgObject.c4 = "Issue";
+            		msgObject.c5 = a_data.issuer;
+            		msgObject.c6 = a_data.maximum_supply;
+
+					txTo = a_data.issuer;
+     				txInfo_description = "Token Create issuer";
+                    tx_data = a_data;
+
+                    //console.log(msgObject);
+
+            	break;
+
+            	case 'issue':
+                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
+            		if (!a_data.to) a_data.to = "";
+            		if (!a_data.quantity) a_data.to = "";
+            		if (!a_data.memo) a_data.to = "";
+            		msgObject.c4 = ">" + a_data.to;
+            		msgObject.c5 = a_data.quantity;
+            		msgObject.c6 = a_data.memo;
+                    var currency = (a_data.quantity+"").split(" ");
+                    //console.log(msgObject);
+                    txTo = a_data.to;
+     				txInfo_description = "Token issue Funds";
+                    tx_data = a_data;
+            	break;
+
+            	case 'transfer':
+					if (!action.authorization[0].actor) action.authorization[0].actor = "";
+            		if (!a_data.from) a_data.from = "";
+            		if (!a_data.to) a_data.to = "";
+            		if (!a_data.quantity) a_data.quantity = "";
+            		if (!a_data.memo) a_data.memo = "";
+
+                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
+            		msgObject.c4 = a_data.from + ">" + a_data.to;
+            		msgObject.c5 = a_data.quantity;
+            		msgObject.c6 = a_data.memo;
+                    var currency = (a_data.quantity+"").split(" ");
+
+                    txTo = a_data.to;
+     				txInfo_description = "Token transfer";
+                    tx_data = a_data;
+                    //console.log(msgObject);
+
+            	break;
+
+            	case 'getbalance':
+                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
+            		msgObject.c4 = "owner";
+            		msgObject.c5 = a_data.owner;
+            		msgObject.c6 = "";
+
+            		txTo = "";
+     				txInfo_description = "Token getbalance";
+                    tx_data = a_data;
+                    //console.log(msgObject);
+
+            	break;
+
+				case 'buyrambytes':
+                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
+            		msgObject.c4 = ">" + a_data.receiver;
+            		msgObject.c5 = "bytes:" + a_data.bytes;
+            		msgObject.c6 = "CPU:" + a_data.stake_cpu_quantity;
+
+            	break;
+
+				case 'delegatebw':
+                    msgObject.c3 = action.authorization[0].actor + "@" + action.account;
+            		msgObject.c4 = ">" + a_data.receiver;
+            		msgObject.c5 = "NET:" + a_data.stake_net_quantity;
+            		msgObject.c6 = "CPU:" + a_data.stake_cpu_quantity;
+            	break;
+
+            	default:
+                    msgObject.c3 = action.account;
+            		msgObject.c4 = "..."
+            		msgObject.c5 = "..";
+            		msgObject.c6 = "..";
+
+                    txTo = "";
+     				txInfo_description = "unknown action";
+     				tx_data = a_data;
+
+            }
+
+            if (action.account == "eosio") {
+            	switch (action.name){
+					case 'issue':
+	            		msgObject.c3 = action.account+"->";
+	            		msgObject.c4 = a_data.to;
+	            		msgObject.c5 = a_data.quantity;
+	            		msgObject.c6 = "";
+	            		if (a_data.memo)
+	            			msgObject.c6 = a_data.memo;
+
+
+	              		var currency = (a_data.quantity+"").split(" ");
+	                    currency[0].replace(".", "");
+	                    currency[0].replace(",", "");
+
+	                    var currobj = {};
+						currobj["balances."+currency[1]+""] = currency[0]*1;
+
+						var updAccount2 = { $inc: currobj };
+	                    this_.updateAccount(this_, a_data.to, updAccount2);
+
+	                    txTo = a_data.to;
+	                    txInfo_description = "Issue for " + a_data.to + " " +a_data.quantity;
+	                    tx_data = a_data;
+	            		//this_.updateAccountbalance(action.name, a_data);
+	            		break;
+	            	case 'transfer':
+	                    msgObject.c3 = a_data.from + "->";
+	            		msgObject.c4 = a_data.to;
+	            		msgObject.c5 = a_data.quantity;
+	            		msgObject.c6 = a_data.memo;
+	                    var currency = (a_data.quantity+"").split(" ");
+	                    //console.log(msgObject);
+						var currobjto = {};
+						var currobjfrom = {};
+
+						var mult = 1;
+						if (currency[1] == "EOS" ) mult = 10000;
+
+						currobjto["balances."+currency[1]+""] = parseInt(currency[0]*mult);
+						currobjfrom["balances."+currency[1]+""] = -1*parseInt(currency[0]*mult);
+	                    //console.log(currobj);
+	            		//var updAccount = { $push: {"transactions": {"action": action.name+' to '+a_data.to, "block":blocknum}}, $inc: currobjfrom };
+	            		updAccount = { $inc: currobjfrom };
+	                    this_.updateAccount(this_, action.account, updAccount);
+
+						//var updAccount2 = { $push: {"transactions": {"action": action.name+' from '+a_data.from, "block":blocknum}}, $inc: currobjto };
+						var updAccount2 = { $inc: currobjto };
+	                    this_.updateAccount(this_, a_data.to, updAccount2);
+
+	     				txTo = a_data.to;
+	     				txInfo_description = "From " + a_data.from + " to " + a_data.to + " " + a_data.quantity + " " + a_data.memo;
+	                    tx_data = a_data;
+	            		//this_.updateAccountbalance(action.name, a_data);
+	            		//console.log(a_data);
+	            		break;
+
+				}
+			}
+
+
+            //var txInfo = {txid: txs_id, "block": blocknum, "account": action.account, "to": txTo, "action": action.name, "date": tx.expiration, "data": tx_data, "description": txInfo_description, "msgObject":msgObject};
+            var txInfo = {txid: txs_id, "block": blocknum, "account": action.account, "to": txTo, "action": action.name, "date": tx.expiration, "data": {}, "description": txInfo_description, "msgObject":msgObject};
+            this_.addTransactions(this_, txInfo);
+
+            //this_.LastTransactions.unshift(txInfo);
+            this_.LastTransactions.push(txInfo);
+            if (this_.LastTransactions.length > 8) {
+            	this_.LastTransactions.shift();
+            }
+
+
+            this_.announceMsg(this_, "transaction", msgObject);
+
+
+            //var newvalues = { $set: updValue, $inc: updAcc  };     //{"balances.EOS"}
+
+       		//setcode: account, code
+       		//setabi: account, abi
+       		//newaccount: creator, name, owner[{key, weight}], active[{key, weight}], recovery [{}]
+       		//issue: to, quantity
+       		//transfer: from, to, quantity, memo
+
+
+       	}
+        //tx.ref_block_num
 	}
-
 }
 
 

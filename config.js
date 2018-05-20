@@ -9,7 +9,7 @@
 ###############################################################################  */
 
 module.exports = {
-	eos_monitor_port: "4000",  //This Monitor Port to listen Websockets and http
+	eos_monitor_port: "9898",  //This Monitor Port to listen Websockets and http
 	nodeAddr: "127.0.0.1:8888", // Your Local node connected to network
 
 	mongoURL: "mongodb://localhost:27017/",  //mongoDB url Path
@@ -21,11 +21,12 @@ module.exports = {
 
 	EOSAPI : {
 		api_get_info: "/v1/chain/get_info",   
-		api_get_block: "/v1/chain/get_block"
+		api_get_block: "/v1/chain/get_block",
+		api_get_table: "/v1/chain/get_table_rows"
 	},
 
 	TELEGRAM_API: {
-		enabled: true,
+		enabled: false,
 		telegram_ID: "12345678:AF3e3asf-FSOFHRFIHF",  //telegrem bot ID
 		tryToCheckBeforeSend: 3,  // How many error loops before send
 		intervalBetweenMsg: 900,  //900sec = 15minutes
